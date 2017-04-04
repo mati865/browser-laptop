@@ -57,29 +57,43 @@ Dispatches a message to set the security state.
 
 
 
-### setFrameTabId(frameProps, tabId, guestInstanceId) 
+### frameTabIdChanged(frameProps, oldTabId, newTabId) 
 
-Dispatches a message to set the frame tab id
-
-**Parameters**
-
-**frameProps**: `Object`, The frame properties
-
-**tabId**: `Number`, the tab id to set
-
-**guestInstanceId**: `Number`, the guest instance id to set
-
-
-
-### framePinned(frameProps, pinned) 
-
-Dispatches a message to pin a tab
+Dispatches a message to change the frame tabId
 
 **Parameters**
 
 **frameProps**: `Object`, The frame properties
 
-**pinned**: `boolean`, true if pinned, otherwise false
+**oldTabId**: `Number`, the current tabId
+
+**newTabId**: `Number`, the new tabId
+
+
+
+### frameGuestInstanceIdChanged(frameProps, oldGuestInstanceId, newGuestInstanceId) 
+
+Dispatches a message when the guestInstanceId changes for a frame
+
+**Parameters**
+
+**frameProps**: `Object`, The frame properties
+
+**oldGuestInstanceId**: `Number`, the current guestInstanceId
+
+**newGuestInstanceId**: `Number`, the new guestInstanceId
+
+
+
+### tabDataChanged(frameProps, tabData) 
+
+Dispatches a message when tab data changes
+
+**Parameters**
+
+**frameProps**: `Object`, The frame properties
+
+**tabData**: `Object`, the tab properties
 
 
 
@@ -104,19 +118,6 @@ Unlike setLocation and loadUrl, this does not modify the state of src and locati
 **Parameters**
 
 **location**: `string`, The text to set as the new navbar URL input
-
-
-
-### setFrameTitle(frameProps, title) 
-
-Dispatches a message to the store to set the current frame's title.
-This should be called in response to the webview encountering a `<title>` tag.
-
-**Parameters**
-
-**frameProps**: `Object`, The frame properties to modify
-
-**title**: `string`, The title to set for the frame
 
 
 
@@ -180,7 +181,7 @@ Dispatches a message to the store to indicate that the webview entered full scre
 
 
 
-### closeFrame(frames, frameProps) 
+### closeFrame(frames, frameProps, forceClosePinned) 
 
 Dispatches a message to close a frame
 
@@ -189,6 +190,8 @@ Dispatches a message to close a frame
 **frames**: `Array.&lt;Object&gt;`, Immutable list of of all the frames
 
 **frameProps**: `Object`, The properties of the frame to close
+
+**forceClosePinned**: `boolean`, Should we force close pinned tab
 
 
 
