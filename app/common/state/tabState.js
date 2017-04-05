@@ -2,8 +2,14 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+const Immutable = require('immutable')
 const { makeImmutable, isMap, isList } = require('./immutableUtil')
 const assert = require('assert')
+const frameState = require('./frameState')
+const getSetting = require('../../../js/settings').getSetting
+const settings = require('../../../js/constants/settings')
+// this file should eventually replace frameStateUtil
+const frameStateUtil = require('../../../js/state/frameStateUtil')
 
 const validateId = function (propName, id) {
   assert.ok(id, `${propName} cannot be null`)
@@ -46,12 +52,12 @@ const validateAction = function (action) {
   return action
 }
 
-const api = {
+const tabState = {
   getTabIndex: (state, tabValue) => {
     state = validateState(state)
     tabValue = validateTabValue(tabValue)
     let tabId = validateId('tabId', tabValue.get('tabId'))
-    return api.getTabIndexByTabId(state, tabId)
+    return tabState.getTabIndexByTabId(state, tabId)
   },
 
   getTabIndexByTabId: (state, tabId) => {
@@ -65,11 +71,11 @@ const api = {
     tabId = validateId('tabId', tabId)
     state = validateState(state)
 
-    let index = api.getTabIndexByTabId(state, tabId)
+    let index = tabState.getTabIndexByTabId(state, tabId)
     if (index === -1) {
       return state
     }
-    return api.removeTabByIndex(state, index)
+    return tabState.removeTabByIndex(state, index)
   },
 
   removeTabByIndex: (state, index) => {
@@ -85,7 +91,7 @@ const api = {
     if (frameProps.get('unloaded')) {
       return state
     }
-    return api.removeTabByTabId(state, frameProps.get('tabId'))
+    return tabState.removeTabByTabId(state, frameProps.get('tabId'))
   },
 
   removeTab: (state, action) => {
@@ -93,14 +99,14 @@ const api = {
     state = validateState(state)
     let tabValue = validateTabValue(action.get('tabValue'))
     let tabId = validateId('tabId', tabValue.get('tabId'))
-    return api.removeTabByTabId(state, tabId)
+    return tabState.removeTabByTabId(state, tabId)
   },
 
   insertTab: (state, action) => {
     action = validateAction(action)
     state = validateState(state)
     let tabValue = validateTabValue(action.get('tabValue'))
-    assert.ok(!api.getTab(state, tabValue), 'Tab already exists')
+    assert.ok(!tabState.getTab(state, tabValue), 'Tab already exists')
     return state.set('tabs', state.get('tabs').push(tabValue))
   },
 
@@ -109,10 +115,10 @@ const api = {
     state = validateState(state)
     let tabValue = validateTabValue(action.get('tabValue'))
 
-    if (api.getTab(state, tabValue)) {
-      return api.updateTab(state, action)
+    if (tabState.getTab(state, tabValue)) {
+      return tabState.updateTab(state, action)
     } else {
-      return api.insertTab(state, action)
+      return tabState.insertTab(state, action)
     }
   },
 
@@ -140,7 +146,7 @@ const api = {
     state = validateState(state)
     tabValue = validateTabValue(tabValue)
     let tabId = validateId('tabId', tabValue.get('tabId'))
-    return api.getByTabId(state, tabId)
+    return tabState.getByTabId(state, tabId)
   },
 
   updateTab: (state, action) => {
@@ -148,7 +154,7 @@ const api = {
     action = validateAction(action)
     let tabValue = validateTabValue(action.get('tabValue'))
     let tabs = state.get('tabs')
-    let index = api.getTabIndex(state, tabValue)
+    let index = tabState.getTabIndex(state, tabValue)
     if (index === -1) {
       return state
     }
@@ -193,14 +199,135 @@ const api = {
     return state.set('tabs', tabs)
   },
 
+  updateFrame: (state, action) => {
+    state = validateState(state)
+    action = validateAction(action)
+    const tabId = action.getIn(['frame', 'tabId'])
+    if (!tabId) {
+      return state
+    }
+
+    let tabValue = tabState.getByTabId(state, tabId)
+    if (!tabValue) {
+      return state
+    }
+
+    tabValue = tabValue.set('frame', makeImmutable(action.get('frame')))
+    return tabState.updateTabValue(state, tabValue)
+  },
+
+  getTabValueById: (state, tabId, key) => {
+    state = validateState(state)
+    tabId = validateId('tabId', tabId)
+    const tab = tabState.getByTabId(state, tabId)
+    if (!tab) {
+      return
+    }
+    return tab.get(key)
+  },
+
+  canGoForward: (state, tabId) => {
+    return tabState.getTabValueById(state, tabId, 'canGoForward') || false
+  },
+
+  canGoBack: (state, tabId) => {
+    return tabState.getTabValueById(state, tabId, 'canGoBack') || false
+  },
+
+  isShowingMessageBox: (state, tabId) => {
+    return tabState.getTabValueById(state, tabId, 'messageBoxDetail') || false
+  },
+
+  getTitle: (state, tabId) => {
+    return tabState.getTabValueById(state, tabId, 'title') || ''
+  },
+
+  getFrameByTabId: (state, tabId) => {
+    const currentWindow = state.get('currentWindow')
+    if (currentWindow) {
+      return frameState.getFrameByTabId(currentWindow, tabId)
+    } else {
+      const tab = tabState.getByTabId(state, tabId)
+      if (tab) {
+        return tab.get('frame')
+      }
+    }
+  },
+
+  isSecure: (state, tabId) => {
+    const frame = tabState.getFrameByTabId(state, tabId)
+    return frameStateUtil.isFrameSecure(frame)
+  },
+
+  isLoading: (state, tabId) => {
+    const frame = tabState.getFrameByTabId(state, tabId)
+    return frameStateUtil.isFrameLoading(frame)
+  },
+
+  startLoadTime: (state, tabId) => {
+    const frame = tabState.getFrameByTabId(state, tabId)
+    return frameStateUtil.startLoadTime(frame)
+  },
+
+  endLoadTime: (state, tabId) => {
+    const frame = tabState.getFrameByTabId(state, tabId)
+    return frameStateUtil.endLoadTime(frame)
+  },
+
+  locationValueSuffix: (state, tabId) => {
+    const frame = tabState.getFrameByTabId(state, tabId)
+    return (frame && frame.getIn(['navbar', 'urlbar', 'suggestions', 'urlSuffix'])) || ''
+  },
+
+  hasLocationValueSuffix: (state, tabId) => {
+    const frame = tabState.getFrameByTabId(state, tabId)
+    return !!(frame && frame.getIn(['navbar', 'urlbar', 'suggestions', 'urlSuffix']))
+  },
+
+  getHistory: (state, tabId) => {
+    const frame = tabState.getFrameByTabId(state, tabId)
+    return frameStateUtil.getHistory(frame)
+  },
+
+  getLocation: (state, tabId) => {
+    const frame = tabState.getFrameByTabId(state, tabId)
+    return (frame && frame.get('location')) || ''
+  },
+
+  getUrlBar: (state, tabId) => {
+    const frame = tabState.getFrameByTabId(state, tabId)
+    return (frame && frame.getIn(['navbar', 'urlbar'])) || new Immutable.Map()
+  },
+
+  // TODO(bridiver) - refactor this so it doesn't require windowState
+  isTitleMode: (state, tabId) => {
+    const windowState = state.get('currentWindow')
+    assert.ok(windowState, `isTitleMode requires windowState`)
+    const mouseInTitlebar = windowState.getIn(['ui', 'mouseInTitlebar'])
+    const bookmarkDetail = windowState.get('bookmarkDetail')
+    const location = tabState.getLocation(state, tabId)
+    const urlbar = tabState.getUrlBar(state, tabId)
+    return tabState.isShowingMessageBox(state, tabId) ||
+      (
+        mouseInTitlebar === false &&
+        !bookmarkDetail &&
+        tabState.getTitle(state, tabId) &&
+        !['about:blank', 'about:newtab'].includes(location) &&
+        !tabState.isLoading(state, tabId) &&
+        !urlbar.get('focused') &&
+        !urlbar.get('active') &&
+        getSetting(settings.DISABLE_TITLE_MODE) === false
+      )
+  },
+
   getPersistentState: (state) => {
     state = makeImmutable(state)
 
-    state = api.removeTabField(state, 'messageBoxDetail')
+    state = tabState.removeTabField(state, 'messageBoxDetail')
 
     // TODO(bridiver) - handle restoring tabs
     return state.delete('tabs')
   }
 }
 
-module.exports = api
+module.exports = tabState
